@@ -37,8 +37,8 @@ typedef struct fskInfoT{
     char value;
     union carryFreqT {
         struct {
-            char high;
             char low;
+            char high;
         } bits;
         quint16 all;
     } carryFreqH, carryFreqL;

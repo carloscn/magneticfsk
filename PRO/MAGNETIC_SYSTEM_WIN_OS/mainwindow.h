@@ -18,14 +18,34 @@ class MainWindow;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-public:
-    void StringToHex(QString str, QByteArray &senddata);
-    char ConvertHexChar(char ch);
-
 
 public:
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
+    void stringToHex(QString str, QByteArray &senddata);
+    char convertHexChar(char ch);
+
+private:
+    Ui::MainWindow *ui;
+    QTimer *repeatSendTimer;
+    QSerialPort *serial;
+    QString currentConnectCom;
+    bool recAsciiFormat;
+    bool sendAsciiFormat;
+    bool repeatSend;
+    bool enableDrawFunction;
+    bool pauseComOutput;
+
+    void sendFskSignal(FSK_INFO* fsk);
+
+    void refreshTheUSBList( void );
+
+    void softAutoWriteUart( void );
+
+    quint8 hexstrToInt(QString str);
+
+    QByteArray statusBarComInfo;
+
 
 private slots:
 
@@ -76,24 +96,6 @@ private slots:
     void on_pushButton_fsk_send_clicked();
 
     void on_pushButton_fsk_clear_clicked();
-
-private:
-    Ui::MainWindow *ui;
-    QTimer *repeatSendTimer;
-    QSerialPort *serial;
-    QString currentConnectCom;
-
-    bool recAsciiFormat;
-    bool sendAsciiFormat;
-    bool repeatSend;
-    bool enableDrawFunction;
-    bool pauseComOutput;
-    void sendFskSignal(FSK_INFO* fsk);
-    void RefreshTheUSBList( void );
-    void SoftAutoWriteUart( void );
-    qint8 HexstrToInt(QString str);
-
-    QByteArray statusBarComInfo;
 };
 
 #endif // MAINWINDOW_H
