@@ -6,21 +6,20 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    setWindowTitle(tr("磁感应FSK信号发射试验控制台"));
     serial = new QSerialPort();
-    RefreshTheUSBList();
-    connect(serial,SIGNAL(readyRead()),this,SLOT( serialRcvData() ) );
+    refreshTheUSBList();
+    connect(serial,SIGNAL(readyRead()),this,SLOT( on_read_message() ) );
 
     // value init.
     sendAsciiFormat = true;
     recAsciiFormat = true;
-    repeatSend = ui->checkBox_repeat->isChecked();
     pauseComOutput = false;
 
     // ui
     ui->pushButton_close->setEnabled(false);
     ui->pushButton_open->setEnabled(true);
     ui->pushButton_scan->setEnabled(true);
-    ui->pushButton_send->setEnabled(false);
     ui->comboBox_baudrate->setCurrentIndex( CONFIG_BAUDRATE_115200_INDEX );
     ui->comboBox_checkdigit->setCurrentIndex( CONFIG_PARITY_NONE_INDEX );
     ui->comboBox_databits->setCurrentIndex( CONFIG_DATABITS_8_INDEX );
@@ -28,50 +27,47 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->comboBox_flowctrl->setCurrentIndex( CONFIG_FLOWCTRL_NONE_INDEX );
 
     // timer
-    int repeatTime = ui->spinBox_repeat->text().toInt();
     repeatSendTimer = new QTimer(this);
 
-    if( repeatSend == true ) {
-        repeatSendTimer->start( repeatTime );
-    }else{
-        repeatSendTimer->stop();
-    }
-    connect( repeatSendTimer, SIGNAL(timeout()), this, SLOT(SoftAutoWriteUart()) );
+
+    connect( repeatSendTimer, SIGNAL(timeout()), this, SLOT(softAutoWriteUart()) );
     // FSK hex mode and dec mode radio button config.
     QButtonGroup* pButtonGroup = new QButtonGroup(this);
     pButtonGroup->addButton(ui->radioButton_fsk_dec_mode,1);
     pButtonGroup->addButton(ui->radioButton_fsk_hex_mode,2);
+
+    ui->checkBox->setChecked(true);
+    on_checkBox_clicked(ui->checkBox->isChecked());
+
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
+
+void MainWindow::on_read_message()
+{
+    QByteArray recvArray;
+    QString recvStr;
+    recvArray = serial->readAll();
+    recvStr = QString(recvArray);
+    ui->textBrowser_fsk->append( "收到下位机信息： " + recvStr );
+    qDebug() <<"recv :" << recvStr;
+}
+
 void MainWindow::on_serial_recv_msg( void )
 {
     QByteArray recvArray;
     QString recvStr;
     recvArray = serial->readAll();
     recvStr = QString(recvArray);
-    if( pauseComOutput == false ) {
-        if( recAsciiFormat == true ) {
-            // ASCII display.
-            qDebug() << recvStr ;
-            ui->textBrowser_rec->append( recvStr );
-        }else {
-            ui->textBrowser_rec->append( recvArray.toHex() );
-        }
-
-        if( enableDrawFunction == true ) {
-            qDebug() << "draw data!";
-        }
-    }
 }
 
 
-void MainWindow::SoftAutoWriteUart( void )
+void MainWindow::softAutoWriteUart( void )
 {
-    QString input = ui->textEdit_send->toPlainText();
+    QString input;
     QByteArray temp;
     qDebug() << "Hello!!!! Timer!";
     if( input.isEmpty() == true ) {
@@ -83,7 +79,7 @@ void MainWindow::SoftAutoWriteUart( void )
             serial->write( input.toLatin1() );
             qDebug() << "UART SendAscii : " << input.toLatin1();
         }else{
-            StringToHex(input, temp);
+            stringToHex(input, temp);
             serial->write( temp.toHex() );
             qDebug() << "UART SendHex : " << temp.toHex();
         }
@@ -257,7 +253,6 @@ void MainWindow::on_pushButton_open_clicked()
         ui->pushButton_open->setEnabled(false);
         ui->comboBox_serialPort->setEnabled(false);
         ui->pushButton_scan->setEnabled(false);
-        ui->pushButton_send->setEnabled(true);
         QMessageBox::information(this,"Information", "UART: "+ portInfo+" has been connected! \n"+"Wait device signals.");
     }
 
@@ -265,7 +260,7 @@ void MainWindow::on_pushButton_open_clicked()
 
 }
 
-void MainWindow::RefreshTheUSBList( void )
+void MainWindow::refreshTheUSBList( void )
 {
     QString portName;
     QString uartName;
@@ -284,7 +279,7 @@ void MainWindow::RefreshTheUSBList( void )
 
 void MainWindow::on_pushButton_scan_clicked()
 {
-    RefreshTheUSBList();
+    refreshTheUSBList();
 }
 
 
@@ -293,7 +288,6 @@ void MainWindow::on_pushButton_close_clicked()
     serial->close();
     ui->pushButton_open->setEnabled( true );
     ui->pushButton_close->setEnabled(false);
-    ui->pushButton_send->setEnabled(false);
     ui->pushButton_scan->setEnabled(true);
     ui->comboBox_serialPort->setEnabled(true);
 }
@@ -458,12 +452,12 @@ void MainWindow::on_radioButton_rec_hex_clicked()
 
 void MainWindow::on_pushButton_clear_clicked()
 {
-    ui->textBrowser_rec->clear();
+
 }
 
 void MainWindow::on_pushButton_send_clicked()
 {
-    QString input = ui->textEdit_send->toPlainText();
+    QString input;
     QByteArray temp;
 
 
@@ -476,7 +470,7 @@ void MainWindow::on_pushButton_send_clicked()
             serial->write( input.toLatin1() );
             qDebug() << "UART SendAscii : " << input.toLatin1();
         }else{
-            StringToHex(input, temp);
+            stringToHex(input, temp);
             serial->write( temp.toHex() );
             qDebug() << "UART SendHex : " << temp.toHex();
         }
@@ -484,7 +478,7 @@ void MainWindow::on_pushButton_send_clicked()
 }
 
 
-void MainWindow::StringToHex(QString str, QByteArray &senddata)
+void MainWindow::stringToHex(QString str, QByteArray &senddata)
 {
     int hexdata,lowhexdata;
     int hexdatalen = 0;
@@ -503,8 +497,8 @@ void MainWindow::StringToHex(QString str, QByteArray &senddata)
         if(i >= len)
             break;
         lstr = str[i].toLatin1();
-        hexdata = ConvertHexChar(hstr);
-        lowhexdata = ConvertHexChar(lstr);
+        hexdata = convertHexChar(hstr);
+        lowhexdata = convertHexChar(lstr);
         if((hexdata == 16) || (lowhexdata == 16))
             break;
         else
@@ -516,7 +510,7 @@ void MainWindow::StringToHex(QString str, QByteArray &senddata)
     senddata.resize(hexdatalen);
 }
 
-char MainWindow::ConvertHexChar(char ch)
+char MainWindow::convertHexChar(char ch)
 {
     if((ch >= '0') && (ch <= '9'))
         return ch-0x30;
@@ -529,14 +523,6 @@ char MainWindow::ConvertHexChar(char ch)
 
 void MainWindow::on_spinBox_repeat_valueChanged(int arg1)
 {
-    if( ui->checkBox_repeat->isChecked() ) {
-
-        repeatSendTimer->start( arg1 );
-        qDebug() << "CheckBox value changed:" << arg1;
-
-    }else {
-        return;
-    }
 
 }
 
@@ -544,15 +530,9 @@ void MainWindow::on_checkBox_repeat_clicked(bool checked)
 {
     repeatSend = checked;
     if( repeatSend == true ) {
-        repeatSendTimer->start( ui->spinBox_repeat->text().toInt()  );
-
     }else{
-        repeatSendTimer->stop();
     }
 }
-
-
-
 
 void MainWindow::on_pushButton_pause_clicked()
 {
@@ -564,8 +544,6 @@ void MainWindow::on_pushButton_pause_clicked()
         ui->pushButton_pause->setText("pause");
     }
 }
-
-
 
 void MainWindow::on_checkBox_wordwrap_stateChanged(int arg1)
 {
@@ -601,24 +579,50 @@ void MainWindow::on_pushButton_fsk_send_clicked()
         QMessageBox::warning(this, "Warning", "有字符串为空，检查后再发送！");
         return;
     }
-
     FSK_INFO fskInfo;
+    float lowFreq = 0.0f;
+    float N = 0.0;
+    float symbolLen = 0;
 
+    N = ui->lineEdit_fsk_number_period->text().toInt();
+    lowFreq = (float)ui->lineEdit_fsk_carry_l->text().toInt();
+    symbolLen = (N/lowFreq) * 1000;
     fskInfo.numberPeriod = ui->lineEdit_fsk_number_period->text().toInt();
-
     fskInfo.carryFreqH.all = ui->lineEdit_fsk_carry_h->text().toInt();
     fskInfo.carryFreqL.all = ui->lineEdit_fsk_carry_l->text().toInt();
-    if (ui->radioButton_fsk_dec_mode->isChecked()) {
-        fskInfo.times = ui->lineEdit_fsk_repeat_times->text().toInt();
-        fskInfo.value = ui->lineEdit_fsk_value->text().toInt();
-    }
-    else if (ui->radioButton_fsk_hex_mode->isChecked()) {
-        fskInfo.times = (char)HexstrToInt(ui->lineEdit_fsk_repeat_times->text());
-        fskInfo.value = (char)HexstrToInt(ui->lineEdit_fsk_value->text());
+    // repeat time
+    QString line;
+    fskInfo.times = ui->lineEdit_fsk_repeat_times->text().toInt();
+    qDebug() <<ui->lineEdit_fsk_repeat_times->text().toUInt();
+    if ( ui->checkBox->isChecked() ) {
+        fskInfo.times = 0xFF;
+        line.append("重复次数：无限");
+    } else {
+        if (ui->lineEdit_fsk_repeat_times->text().toUInt() > 255) {
+                QMessageBox::warning(this, "错误", "重复次数需要低于255");
+                ui->lineEdit_fsk_repeat_times->setText("255");
+                return;
+        }else {
+            fskInfo.times = ui->lineEdit_fsk_repeat_times->text().toUInt();
+            line.append("重复次数 : "+QString::number((unsigned int)fskInfo.times& 0xFF));
+        }
     }
 
-    sendFskSignal(&fskInfo);
+    // value
+    fskInfo.value = (char)hexstrToInt(ui->lineEdit_fsk_value->text());
     // 使用串口发送协议
+    sendFskSignal(&fskInfo);
+    ui->textBrowser_fsk->append("--------------");
+    ui->textBrowser_fsk->append("发送信号参数：");
+    ui->textBrowser_fsk->append("载波频率：" + ui->lineEdit_fsk_carry_h->text() + " Hz / " \
+                                + ui->lineEdit_fsk_carry_l->text() + "Hz.");
+
+
+    ui->textBrowser_fsk->append(line);
+    ui->textBrowser_fsk->append("发送数值：0x" + ui->lineEdit_fsk_value->text());
+    ui->textBrowser_fsk->append("码元长度：" + QString::number(symbolLen) + "ms." );
+    ui->textBrowser_fsk->append("--------------\n");
+
 }
 
 void MainWindow::sendFskSignal(FSK_INFO* fsk)
@@ -642,22 +646,38 @@ void MainWindow::sendFskSignal(FSK_INFO* fsk)
     sendInfoStr.prepend(fskArray);
 
 }
-qint8 MainWindow::HexstrToInt(QString str)
+quint8 MainWindow::hexstrToInt(QString str)
 {
-    QString repeatTimeStr = str;
-    QByteArray publishPlotocal,tempByteHigh,tempByteLow;
-    publishPlotocal = repeatTimeStr.toLatin1();
-    tempByteHigh[0] = publishPlotocal.at(0);
-    qint8 numHigh = tempByteHigh.toInt(NULL,16);
-    tempByteLow[0] = publishPlotocal.at(1);
-    qint8 numLow = tempByteLow.toInt(NULL,16);
-    qint8 num = numHigh * 16 + numHigh * 1;
 
-    return num;
+    quint8 i;
+    quint8 n = 0;
+    quint8 len = 2;
 
+    for (i=0;i<len;++i)
+    {
+        if (str.at(i) > '9')
+        {
+            n = 16 * n + (10 + str.at(i).toLatin1() - 'A');
+        }
+        else
+        {
+            n = 16 * n +( str.at(i).toLatin1() - '0');
+        }
+    }
+    return n;
 }
 
 void MainWindow::on_pushButton_fsk_clear_clicked()
 {
     ui->textBrowser_fsk->clear();
+}
+
+void MainWindow::on_checkBox_clicked()
+{
+
+}
+
+void MainWindow::on_checkBox_clicked(bool checked)
+{
+    ui->lineEdit_fsk_repeat_times->setEnabled(!checked);
 }
